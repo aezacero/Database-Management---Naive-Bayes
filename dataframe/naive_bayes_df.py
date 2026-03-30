@@ -342,21 +342,21 @@ def main():
 
     import sys, os
     sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-    from data.loader import load_dataframe, FEATURE_NAMES, LABEL_COL, NUM_BINS
+    from data.loader import load_car_dataframe, CAR_FEATURE_COLS, CAR_LABEL_COL
 
     # TODO: Replace None with your actual file path to use real data.
-    #       Example (local):      "/Users/you/data/iris.csv"
-    #       Example (Databricks): "dbfs:/FileStore/iris.csv"
-    train_df, test_df, feature_stats = load_dataframe(spark, filepath=None)
+    #       Example (local):      "/Users/you/data/car.data"
+    #       Example (Databricks): "dbfs:/FileStore/car.data"
+    train_df, test_df = load_car_dataframe(spark, filepath=None)
 
     # ---- Train ----
     print("Training (DataFrame)...")
     t_start = time.time()
     class_probs_df, feature_probs_df, classes = train(
         train_df,
-        feature_cols=FEATURE_NAMES,
-        label_col=LABEL_COL,
-        num_bins=NUM_BINS,
+        feature_cols=CAR_FEATURE_COLS,
+        label_col=CAR_LABEL_COL,
+        num_bins=3,
     )
     t_train = time.time() - t_start
     print(f"  Training time: {t_train:.3f}s")
@@ -369,9 +369,9 @@ def main():
         test_df,
         class_probs_df,
         feature_probs_df,
-        feature_cols=FEATURE_NAMES,
-        label_col=LABEL_COL,
-        num_bins=NUM_BINS,
+        feature_cols=CAR_FEATURE_COLS,
+        label_col=CAR_LABEL_COL,
+        num_bins=3,
         spark=spark,
     )
     prediction_df.cache()
@@ -379,10 +379,10 @@ def main():
     print(f"  Prediction time: {t_predict:.3f}s")
 
     # ---- Evaluate ----
-    accuracy = evaluate(prediction_df, label_col=LABEL_COL)
+    accuracy = evaluate(prediction_df, label_col=CAR_LABEL_COL)
     print(f"  Accuracy: {accuracy:.4f} ({accuracy * 100:.1f}%)")
 
-    prediction_df.select(LABEL_COL, "prediction").show(10)
+    prediction_df.select(CAR_LABEL_COL, "prediction").show(10)
 
     spark.stop()
 

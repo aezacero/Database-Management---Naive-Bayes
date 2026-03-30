@@ -33,7 +33,7 @@ import os
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 from pyspark.sql import SparkSession
-from data.loader import load_rdd, load_dataframe, FEATURE_NAMES, LABEL_COL, NUM_BINS
+from data.loader import load_car_rdd, load_car_dataframe, CAR_FEATURE_COLS, CAR_LABEL_COL
 from rdd.naive_bayes_rdd import train as rdd_train, predict as rdd_predict, evaluate as rdd_evaluate
 from dataframe.naive_bayes_df import (
     train as df_train, predict as df_predict, evaluate as df_evaluate
@@ -130,8 +130,8 @@ def run_one_experiment(spark, scale_factor: int, filepath=None):
     # Load base datasets (both RDD and DataFrame versions)
     # TODO: Replace None with your real dataset path for meaningful experiments.
     #       Dummy data has only 5 rows; results on it are not meaningful.
-    base_train_rdd, test_rdd, _ = load_rdd(spark, filepath=filepath)
-    base_train_df,  test_df,  _ = load_dataframe(spark, filepath=filepath)
+    base_train_rdd, test_rdd = load_car_rdd(spark, filepath=filepath)
+    base_train_df,  test_df  = load_car_dataframe(spark, filepath=filepath)
 
     # Scale up the training data
     train_rdd = make_scaled_rdd(base_train_rdd, scale_factor, spark)
@@ -149,7 +149,7 @@ def run_one_experiment(spark, scale_factor: int, filepath=None):
     # ---- RDD benchmark ----
     print("  [RDD] Training...")
     t0 = time.time()
-    rdd_model = rdd_train(train_rdd, num_features=len(FEATURE_NAMES), num_bins=NUM_BINS)
+    rdd_model = rdd_train(train_rdd, num_features=len(CAR_FEATURE_COLS), num_bins=3)
     result["rdd_train_s"] = time.time() - t0
     print(f"    Train time: {result['rdd_train_s']:.3f}s")
 
@@ -165,7 +165,7 @@ def run_one_experiment(spark, scale_factor: int, filepath=None):
     print("  [DF] Training...")
     t0 = time.time()
     class_probs, feat_probs, classes = df_train(
-        train_df, feature_cols=FEATURE_NAMES, label_col=LABEL_COL, num_bins=NUM_BINS
+        train_df, feature_cols=CAR_FEATURE_COLS, label_col=CAR_LABEL_COL, num_bins=3
     )
     result["df_train_s"] = time.time() - t0
     print(f"    Train time: {result['df_train_s']:.3f}s")
@@ -174,12 +174,12 @@ def run_one_experiment(spark, scale_factor: int, filepath=None):
     t0 = time.time()
     df_preds = df_predict(
         test_df, class_probs, feat_probs,
-        feature_cols=FEATURE_NAMES, label_col=LABEL_COL,
-        num_bins=NUM_BINS, spark=spark
+        feature_cols=CAR_FEATURE_COLS, label_col=CAR_LABEL_COL,
+        num_bins=3, spark=spark
     )
     df_preds.cache()
     result["df_predict_s"] = time.time() - t0
-    result["df_acc"] = df_evaluate(df_preds, label_col=LABEL_COL)
+    result["df_acc"] = df_evaluate(df_preds, label_col=CAR_LABEL_COL)
     print(f"    Predict time: {result['df_predict_s']:.3f}s  |  Accuracy: {result['df_acc']:.3f}")
 
     # Clean up cached data to free memory before next experiment

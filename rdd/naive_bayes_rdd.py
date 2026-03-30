@@ -319,15 +319,15 @@ def main():
     # benchmark.py imports from both rdd/ and dataframe/.
     import sys, os
     sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-    from data.loader import load_rdd, NUM_BINS, FEATURE_NAMES
+    from data.loader import load_car_rdd, CAR_FEATURE_COLS
 
     # TODO: Replace None with your actual file path to use real data.
-    #       Example (local):     "/Users/you/data/iris.csv"
-    #       Example (Databricks): "dbfs:/FileStore/iris.csv"
-    train_rdd, test_rdd, feature_stats = load_rdd(spark, filepath=None)
+    #       Example (local):      "/Users/you/data/car.data"
+    #       Example (Databricks): "dbfs:/FileStore/car.data"
+    train_rdd, test_rdd = load_car_rdd(spark, filepath=None)
 
-    num_features = len(FEATURE_NAMES)
-    num_bins     = NUM_BINS
+    num_features = len(CAR_FEATURE_COLS)
+    num_bins     = 3  # approximate vocab size per categorical feature for Laplace smoothing
 
     # ---- Train ----
     print("Training (RDD)...")

@@ -4,54 +4,28 @@ data/loader.py
 Dataset loading utilities shared by all four implementation notebooks
 and the benchmark notebook.
 
-Dataset: UCI Car Evaluation
-  All six feature columns are categorical strings — no discretisation needed.
-  This simplifies the pipeline compared to continuous-feature datasets like Iris.
+Two datasets are supported:
+  - UCI Car Evaluation  (1 728 rows, 6 features, 4 classes, all categorical)
+  - UCI Mushroom        (8 124 rows, 22 features, 2 classes, all categorical)
 
-  Columns : buying, maint, doors, persons, lug_boot, safety → class (label)
-  Classes : unacc, acc, good, vgood
-  Size    : 1728 rows, balanced across features but skewed on class (~70% unacc)
+Both datasets are entirely categorical, so no discretisation step is needed
+before running the Naive Bayes algorithm.
 
-Two loaders are provided:
-  - load_rdd()       → (train_rdd, test_rdd)   each row = (label, [feat_0...feat_5])
-  - load_dataframe() → (train_df, test_df)      named columns + "label" column
+Two loader pairs are provided per dataset:
+  load_car_rdd()           → (train_rdd, test_rdd)
+  load_car_dataframe()     → (train_df,  test_df)
+  load_mushroom_rdd()      → (train_rdd, test_rdd)
+  load_mushroom_dataframe()→ (train_df,  test_df)
 
-Both use the same random seed so train/test splits are identical and results
-are comparable across all four implementations.
+Each RDD element  : (label, [feat_0, feat_1, ..., feat_n])
+Each DataFrame row: named feature columns + a "label" column
+
+Both loaders for the same dataset use the same random seed so train/test
+splits are identical and RDD vs DataFrame results are directly comparable.
 """
 
 from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType, StructField, StringType
-
-
-# ---------------------------------------------------------------------------
-# Column definitions — update these if you switch to a different dataset
-# ---------------------------------------------------------------------------
-
-# TODO: If using a different dataset, change COLUMN_NAMES to match your CSV header.
-COLUMN_NAMES = ["buying", "maint", "doors", "persons", "lug_boot", "safety", "label"]
-
-# Feature columns are everything except the label
-FEATURE_COLS = COLUMN_NAMES[:-1]
-
-LABEL_COL = "label"
-
-# Fixed seed ensures train/test split is identical across all four notebooks,
-# so timing comparisons are fair (same data, not just same distribution).
-RANDOM_SEED = 42
-
-
-# ---------------------------------------------------------------------------
-# Hardcoded 5-row dummy dataset for immediate local testing
-# Exactly the same format as the real car.data file: 7 comma-separated values.
-# ---------------------------------------------------------------------------
-DUMMY_DATA = [
-    ("low", "med", "2",    "2", "small", "low",  "unacc"),
-    ("low", "med", "2",    "2", "small", "med",  "unacc"),
-    ("low", "med", "2",    "2", "small", "high", "acc"),
-    ("low", "med", "2",    "2", "med",   "low",  "acc"),
-    ("low", "med", "2",    "2", "med",   "med",  "good"),
-]
 
 
 # ---------------------------------------------------------------------------
@@ -71,20 +45,51 @@ def get_spark():
     )
 
 
-# ---------------------------------------------------------------------------
-# RDD loader
-# ---------------------------------------------------------------------------
-def load_rdd(spark, filepath=None, train_ratio=0.8):
-    """
-    Load the car evaluation dataset and return (train_rdd, test_rdd) as Spark RDDs.
+# ===========================================================================
+# CAR EVALUATION DATASET
+# ===========================================================================
 
-    Each RDD element is a tuple: (label, [feature_0, feature_1, ..., feature_5])
-    where all values are strings (no numeric conversion needed for this dataset).
+# Column definitions — update these if you switch to a different dataset.
+CAR_COLUMN_NAMES = ["buying", "maint", "doors", "persons", "lug_boot", "safety", "label"]
+CAR_FEATURE_COLS = CAR_COLUMN_NAMES[:-1]   # all columns except the label
+CAR_LABEL_COL    = "label"
+
+# In car.data the label is the LAST column.
+_CAR_LABEL_INDEX = -1
+
+# Backward-compat aliases — notebooks import these by the shorter names.
+# Both resolve to the car evaluation dataset constants.
+FEATURE_COLS = CAR_FEATURE_COLS
+LABEL_COL    = CAR_LABEL_COL
+
+# Fixed seed ensures train/test split is identical across all four notebooks,
+# so timing comparisons are fair (same data, not just same distribution).
+RANDOM_SEED = 42
+
+# Hardcoded 5-row dummy dataset for immediate local testing.
+# Same format as the real car.data: comma-separated, label last.
+CAR_DUMMY_DATA = [
+    ("low", "med", "2", "2", "small", "low",  "unacc"),
+    ("low", "med", "2", "2", "small", "med",  "unacc"),
+    ("low", "med", "2", "2", "small", "high", "acc"),
+    ("low", "med", "2", "2", "med",   "low",  "acc"),
+    ("low", "med", "2", "2", "med",   "med",  "good"),
+]
+
+
+def load_car_rdd(spark, filepath=None, train_ratio=0.8):
+    """
+    Load the UCI Car Evaluation dataset and return (train_rdd, test_rdd).
+
+    Each RDD element: (label, [feat_0, ..., feat_5])
+    All values are strings — no numeric conversion needed.
 
     Args:
         spark       : active SparkSession
-        filepath    : path to the CSV/data file; pass None to use DUMMY_DATA
-        train_ratio : fraction used for training (default 0.8 = 80/20 split)
+        filepath    : path to car.data; pass None to use CAR_DUMMY_DATA
+                      Local:      "/path/to/car.data"
+                      Databricks: "dbfs:/FileStore/car.data"
+        train_ratio : fraction used for training (default 0.8)
 
     Returns:
         (train_rdd, test_rdd)
@@ -92,74 +97,43 @@ def load_rdd(spark, filepath=None, train_ratio=0.8):
     sc = spark.sparkContext
 
     if filepath is None:
-        # Use the hardcoded dummy dataset so the pipeline can be tested immediately.
-        # Each row is already a Python tuple matching the expected column order.
-        raw_rdd = sc.parallelize(DUMMY_DATA)
-
+        raw_rdd = sc.parallelize(CAR_DUMMY_DATA)
     else:
-        # TODO: Change filepath to your actual file location before running.
-        #   Local   : "/Users/you/data/car.data"
-        #   Databricks DBFS: "dbfs:/FileStore/car.data"
         raw_rdd = sc.textFile(filepath)
-
-        # TODO: The real car.data file has no header row and uses "," as delimiter.
-        #       If your file has a header, add:
-        #           header = raw_rdd.first()
-        #           raw_rdd = raw_rdd.filter(lambda line: line != header)
-        #       If your delimiter is different (e.g. ";"), change split(",") below.
+        # car.data has no header row; delimiter is comma.
         raw_rdd = raw_rdd.map(lambda line: tuple(line.strip().split(",")))
 
-    # Reformat each row from a flat tuple to (label, [features]).
-    # The label is the last column; features are all preceding columns.
     # Input:  ("low", "med", "2", "2", "small", "low", "unacc")
     # Output: ("unacc", ["low", "med", "2", "2", "small", "low"])
-    parsed_rdd = raw_rdd.map(lambda row: (row[-1], list(row[:-1])))
+    parsed_rdd = raw_rdd.map(lambda row: (row[_CAR_LABEL_INDEX], list(row[:_CAR_LABEL_INDEX])))
 
-    # Split into train and test with a fixed seed so all notebooks use the same split.
-    # TODO: Adjust train_ratio if you want a different split (e.g. 0.7 for 70/30).
     train_rdd, test_rdd = parsed_rdd.randomSplit(
         [train_ratio, 1.0 - train_ratio], seed=RANDOM_SEED
     )
-
-    # Cache training data — it will be read multiple times during the training phase.
     train_rdd.cache()
-
     return train_rdd, test_rdd
 
 
-# ---------------------------------------------------------------------------
-# DataFrame loader
-# ---------------------------------------------------------------------------
-def load_dataframe(spark, filepath=None, train_ratio=0.8):
+def load_car_dataframe(spark, filepath=None, train_ratio=0.8):
     """
-    Load the car evaluation dataset and return (train_df, test_df) as Spark DataFrames.
+    Load the UCI Car Evaluation dataset and return (train_df, test_df).
 
-    The returned DataFrames have columns:
-        buying, maint, doors, persons, lug_boot, safety, label
-    All columns are string type (the dataset is entirely categorical).
+    Columns: buying, maint, doors, persons, lug_boot, safety, label
+    All columns are StringType.
 
     Args:
         spark       : active SparkSession
-        filepath    : path to the data file; pass None to use DUMMY_DATA
+        filepath    : path to car.data; pass None to use CAR_DUMMY_DATA
         train_ratio : fraction used for training
 
     Returns:
         (train_df, test_df)
     """
-    schema = StructType([
-        StructField(col, StringType(), True) for col in COLUMN_NAMES
-    ])
+    schema = StructType([StructField(col, StringType(), True) for col in CAR_COLUMN_NAMES])
 
     if filepath is None:
-        # Build a DataFrame directly from the in-memory dummy data.
-        df = spark.createDataFrame(DUMMY_DATA, schema=schema)
-
+        df = spark.createDataFrame(CAR_DUMMY_DATA, schema=schema)
     else:
-        # TODO: Change filepath to your actual file location.
-        #   Databricks DBFS: "dbfs:/FileStore/car.data"
-        # TODO: The real car.data file has no header. If yours does, change
-        #       header="false" → header="true" and remove the schema argument.
-        # TODO: Change delimiter if your file doesn't use commas.
         df = (
             spark.read
             .option("header", "false")
@@ -168,37 +142,170 @@ def load_dataframe(spark, filepath=None, train_ratio=0.8):
             .csv(filepath)
         )
 
-    # Rename the last column to "label" for consistency with LABEL_COL constant.
-    # (The schema already names it "label", so this is a no-op unless you changed it.)
-    # TODO: If your dataset has a different label column name, add a rename here:
-    #       df = df.withColumnRenamed("class", "label")
-
-    # Split with the same seed used in load_rdd() so both loaders produce
-    # equivalent splits and results are directly comparable.
-    # TODO: Adjust train_ratio to match what you use in load_rdd().
     train_df, test_df = df.randomSplit(
         [train_ratio, 1.0 - train_ratio], seed=RANDOM_SEED
     )
-
     train_df.cache()
-
     return train_df, test_df
 
 
-# ---------------------------------------------------------------------------
-# Quick sanity check — run this file directly to verify both loaders work
-# ---------------------------------------------------------------------------
+# ===========================================================================
+# MUSHROOM DATASET
+# ===========================================================================
+
+# In mushroom.data the label is the FIRST column (p=poisonous, e=edible),
+# followed by 22 categorical feature columns.
+# Source: https://archive.ics.uci.edu/ml/datasets/Mushroom
+MUSHROOM_COLUMN_NAMES = [
+    "label",                       # p = poisonous, e = edible  ← FIRST column
+    "cap_shape",                   # b,c,x,f,k,s
+    "cap_surface",                 # f,g,y,s
+    "cap_color",                   # n,b,c,g,r,p,u,e,w,y
+    "bruises",                     # t,f
+    "odor",                        # a,l,c,y,f,m,n,p,s
+    "gill_attachment",             # a,d,f,n
+    "gill_spacing",                # c,w,d
+    "gill_size",                   # b,n
+    "gill_color",                  # k,n,b,h,g,r,o,p,u,e,w,y
+    "stalk_shape",                 # e,t
+    "stalk_root",                  # b,c,u,e,z,r,?
+    "stalk_surface_above_ring",    # f,y,k,s
+    "stalk_surface_below_ring",    # f,y,k,s
+    "stalk_color_above_ring",      # n,b,c,g,o,p,e,w,y
+    "stalk_color_below_ring",      # n,b,c,g,o,p,e,w,y
+    "veil_type",                   # p,u
+    "veil_color",                  # n,o,w,y
+    "ring_number",                 # n,o,t
+    "ring_type",                   # c,e,f,l,n,p,s,z
+    "spore_print_color",           # k,n,b,h,r,o,u,w,y
+    "population",                  # a,c,n,s,v,y
+    "habitat",                     # g,l,m,p,u,w,d
+]
+
+MUSHROOM_FEATURE_COLS = MUSHROOM_COLUMN_NAMES[1:]  # everything after the label
+MUSHROOM_LABEL_COL    = "label"
+
+# Label is the FIRST column in mushroom.data (opposite of car.data).
+_MUSHROOM_LABEL_INDEX = 0
+
+# Hardcoded dummy rows for immediate local smoke-testing.
+# Format matches the real mushroom.data: label first, then 22 feature values.
+MUSHROOM_DUMMY_DATA = [
+    ("p", "x", "s", "n", "t", "p", "f", "c", "n", "k", "e", "e", "s", "s", "w", "w", "p", "w", "o", "p", "k", "s", "u"),
+    ("e", "x", "s", "y", "t", "a", "f", "c", "b", "k", "e", "c", "s", "s", "w", "w", "p", "w", "o", "p", "n", "n", "g"),
+    ("e", "b", "s", "w", "t", "l", "f", "c", "b", "n", "e", "c", "s", "s", "w", "w", "p", "w", "o", "p", "n", "n", "m"),
+    ("p", "x", "y", "w", "t", "p", "f", "c", "n", "n", "e", "e", "s", "s", "w", "w", "p", "w", "o", "p", "k", "s", "u"),
+    ("e", "x", "s", "g", "f", "n", "f", "w", "b", "k", "t", "e", "s", "s", "w", "w", "p", "w", "o", "e", "n", "a", "g"),
+]
+
+
+def load_mushroom_rdd(spark, filepath=None, train_ratio=0.8):
+    """
+    Load the UCI Mushroom dataset and return (train_rdd, test_rdd).
+
+    Each RDD element: (label, [feat_0, ..., feat_21])
+    label is "p" (poisonous) or "e" (edible).
+    All values are single-character strings — no numeric conversion needed.
+
+    Note on the raw file format:
+        mushroom.data has NO header row.
+        The label is the FIRST column (unlike car.data where it is last).
+        Delimiter is comma.
+
+    Args:
+        spark       : active SparkSession
+        filepath    : path to mushroom.data; pass None to use MUSHROOM_DUMMY_DATA
+                      Local:      "/path/to/mushroom.data"
+                      Databricks: "dbfs:/FileStore/mushroom.data"
+        train_ratio : fraction used for training (default 0.8)
+
+    Returns:
+        (train_rdd, test_rdd)
+    """
+    sc = spark.sparkContext
+
+    if filepath is None:
+        raw_rdd = sc.parallelize(MUSHROOM_DUMMY_DATA)
+    else:
+        raw_rdd = sc.textFile(filepath)
+        # No header row; label is the first comma-separated value.
+        raw_rdd = raw_rdd.map(lambda line: tuple(line.strip().split(",")))
+
+    # Input:  ("p", "x", "s", "n", "t", "p", "f", "c", "n", "k", ...)
+    # Output: ("p", ["x", "s", "n", "t", "p", "f", "c", "n", "k", ...])
+    parsed_rdd = raw_rdd.map(
+        lambda row: (row[_MUSHROOM_LABEL_INDEX], list(row[_MUSHROOM_LABEL_INDEX + 1:]))
+    )
+
+    # Same seed as car loaders so cross-dataset comparisons are consistent.
+    train_rdd, test_rdd = parsed_rdd.randomSplit(
+        [train_ratio, 1.0 - train_ratio], seed=RANDOM_SEED
+    )
+    train_rdd.cache()
+    return train_rdd, test_rdd
+
+
+def load_mushroom_dataframe(spark, filepath=None, train_ratio=0.8):
+    """
+    Load the UCI Mushroom dataset and return (train_df, test_df).
+
+    Columns: label, cap_shape, cap_surface, ..., habitat  (23 total)
+    All columns are StringType.
+
+    Args:
+        spark       : active SparkSession
+        filepath    : path to mushroom.data; pass None to use MUSHROOM_DUMMY_DATA
+        train_ratio : fraction used for training
+
+    Returns:
+        (train_df, test_df)
+    """
+    schema = StructType([StructField(col, StringType(), True) for col in MUSHROOM_COLUMN_NAMES])
+
+    if filepath is None:
+        df = spark.createDataFrame(MUSHROOM_DUMMY_DATA, schema=schema)
+    else:
+        df = (
+            spark.read
+            .option("header", "false")
+            .option("delimiter", ",")
+            .schema(schema)
+            .csv(filepath)
+        )
+
+    train_df, test_df = df.randomSplit(
+        [train_ratio, 1.0 - train_ratio], seed=RANDOM_SEED
+    )
+    train_df.cache()
+    return train_df, test_df
+
+
+# ===========================================================================
+# Quick sanity check — run this file directly to verify all loaders work
+# ===========================================================================
 if __name__ == "__main__":
     spark = get_spark()
 
-    print("=== RDD Loader (dummy data) ===")
-    train_rdd, test_rdd = load_rdd(spark)
+    print("=== Car RDD Loader (dummy data) ===")
+    train_rdd, test_rdd = load_car_rdd(spark)
     print(f"  Train rows : {train_rdd.count()}")
     print(f"  Test rows  : {test_rdd.count()}")
     print(f"  Sample     : {train_rdd.first()}")
 
-    print("\n=== DataFrame Loader (dummy data) ===")
-    train_df, test_df = load_dataframe(spark)
+    print("\n=== Car DataFrame Loader (dummy data) ===")
+    train_df, test_df = load_car_dataframe(spark)
+    print(f"  Train rows : {train_df.count()}")
+    print(f"  Test rows  : {test_df.count()}")
+    train_df.show(3)
+
+    print("\n=== Mushroom RDD Loader (dummy data) ===")
+    train_rdd, test_rdd = load_mushroom_rdd(spark)
+    print(f"  Train rows : {train_rdd.count()}")
+    print(f"  Test rows  : {test_rdd.count()}")
+    print(f"  Sample     : {train_rdd.first()}")
+
+    print("\n=== Mushroom DataFrame Loader (dummy data) ===")
+    train_df, test_df = load_mushroom_dataframe(spark)
     print(f"  Train rows : {train_df.count()}")
     print(f"  Test rows  : {test_df.count()}")
     train_df.show(3)
