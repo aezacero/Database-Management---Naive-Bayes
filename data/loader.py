@@ -34,15 +34,23 @@ from pyspark.sql.types import StructType, StructField, StringType
 def get_spark():
     """
     Create or retrieve a SparkSession.
-    On Databricks, getOrCreate() returns the already-running cluster session.
-    Locally, it starts an embedded Spark instance using all available CPU cores.
+
+    On Databricks, a SparkSession is already running and getOrCreate() returns it.
+    The .master() call is intentionally omitted when running on a cluster — Databricks
+    injects the master URL automatically. Calling .master("local[*]") on a cluster
+    would override the cluster config and run everything on the driver node only.
+
+    Locally (laptop / CI), we fall back to local[*] so the code runs without a cluster.
+    We detect Databricks by checking for the DATABRICKS_RUNTIME_VERSION env variable,
+    which Databricks sets automatically on every cluster node.
     """
-    return (
-        SparkSession.builder
-        .appName("NaiveBayes-Loader")
-        .master("local[*]")
-        .getOrCreate()
-    )
+    import os
+    builder = SparkSession.builder.appName("NaiveBayes-Loader")
+    if not os.environ.get("DATABRICKS_RUNTIME_VERSION"):
+        # Running locally — start an embedded Spark instance.
+        builder = builder.master("local[*]")
+    # On Databricks, no .master() call — the cluster provides its own URL.
+    return builder.getOrCreate()
 
 
 # ===========================================================================
