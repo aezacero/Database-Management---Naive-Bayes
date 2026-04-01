@@ -9,7 +9,7 @@ Implement a Naive Bayes classifier using the MapReduce paradigm in PySpark, in t
 - **RDD API** — low-level, explicit map/reduce operations (baseline + optimized)
 - **DataFrame API** — high-level SQL-style operations (baseline + optimized)
 
-Then **compare all four experimentally** on Databricks Community Edition (execution time, scalability).
+Then **compare all four experimentally** on Google Dataproc (execution time, scalability).
 
 ## File Ownership
 | Person | Files |
@@ -93,7 +93,7 @@ This matches the augmentation approach from Zheng (2014).
 | 1 | **Solution description** — clear explanation of what the solution does | 4 pts |
 | 2 | **Algorithm design + global comments** — overall structure, design choices explained | 4 pts |
 | 3 | **Code comments on main fragments** — inline comments on key code blocks | 3 pts |
-| 4 | **Scalability experiments** — timing results across dataset sizes, Databricks cluster | 3 pts |
+| 4 | **Scalability experiments** — timing results across dataset sizes, Google Dataproc cluster | 3 pts |
 | 5 | **Weak/strong points analysis** — honest comparison of RDD vs DataFrame, bottlenecks | 3 pts |
 | 6 | **Code appendix** — clean, readable code attached to the report | 2 pts |
 
@@ -128,6 +128,6 @@ Zheng, S. (2014). *Naïve Bayes Classifier: A MapReduce Approach*. NDSU Master's
 - Expected accuracy on car evaluation dataset: ~87.39%
 
 ## Running Locally
-All notebooks include a local SparkSession setup so they can be tested without Databricks.
+All notebooks include a local SparkSession setup so they can be tested without a cluster.
 Use the dummy dataset in `data/loader.py` (5 hardcoded rows) for a quick smoke test.
-To switch to real data: replace `DATA_PATH = None` with `"dbfs:/FileStore/car.data"`.
+To switch to real data: replace `DATA_PATH = None` with `"gs://your-bucket/car.data"`.
